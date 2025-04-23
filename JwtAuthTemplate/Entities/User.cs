@@ -11,5 +11,9 @@
         public DateTime? RefreshTokenExpiryTime { get; set; }
         public string? VerificationToken { get; set; } // Token xác thực email
         public bool IsEmailVerified { get; set; } = false; // Trạng thái xác thực email
+
+        // Thuộc tính mới cho chức năng quên mật khẩu
+        public string? ResetPasswordToken { get; set; }
+        public DateTime? ResetPasswordExpiry { get; set; }
     }
 }

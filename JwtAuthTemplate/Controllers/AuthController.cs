@@ -4,6 +4,7 @@ using JwtAuthTemplate.Models;
 using JwtAuthTemplate.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace JwtAuthTemplate.Controllers
 {
@@ -69,6 +70,56 @@ namespace JwtAuthTemplate.Controllers
             }
 
             return Ok("Email verified successfully.");
+        }
+
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto request)
+        {
+            var user = await _authService.ForgotPasswordAsync(request.Email);
+            if (user is null)
+            {
+                return BadRequest("Email not found.");
+            }
+
+            // Tạo đường link đặt lại mật khẩu
+            var resetLink = Url.Action(
+                "ResetPassword",
+                "Auth",
+                new { token = user.ResetPasswordToken },
+                Request.Scheme
+            );
+
+            // Gửi email đặt lại mật khẩu
+            var mailContent = new MailContent
+            {
+                To = request.Email,
+                Subject = "Reset Your Password",
+                Body =
+                    $"<p>Click the link below to reset your password:</p><a href='{resetLink}'>Reset Password</a>",
+            };
+
+            try
+            {
+                await _sendMailService.SendMail(mailContent);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Failed to send email: {ex.Message}");
+            }
+
+            return Ok("Password reset link has been sent to your email.");
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto request)
+        {
+            var result = await _authService.ResetPasswordAsync(request.Token, request.NewPassword);
+            if (!result)
+            {
+                return BadRequest("Invalid or expired token.");
+            }
+
+            return Ok("Password has been reset successfully.");
         }
 
         [HttpPost("login")]

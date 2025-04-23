@@ -22,6 +22,40 @@ namespace JwtAuthTemplate.Service
             _configuration = configuration;
         }
 
+        public async Task<User?> ForgotPasswordAsync(string email)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+            {
+                return null;
+            }
+
+            user.ResetPasswordToken = Guid.NewGuid().ToString(); // Tạo token đặt lại mật khẩu
+            user.ResetPasswordExpiry = DateTime.UtcNow.AddHours(1); // Token hết hạn sau 1 giờ
+            await _context.SaveChangesAsync();
+
+            return user;
+        }
+
+        public async Task<bool> ResetPasswordAsync(string token, string newPassword)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u =>
+                u.ResetPasswordToken == token && u.ResetPasswordExpiry > DateTime.UtcNow
+            );
+
+            if (user == null)
+            {
+                return false;
+            }
+
+            user.PasswordHash = new PasswordHasher<User>().HashPassword(user, newPassword);
+            user.ResetPasswordToken = null; // Xóa token sau khi đặt lại mật khẩu
+            user.ResetPasswordExpiry = null;
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
         public async Task<User?> RegisterAsync(UserDto request)
         {
             if (await _context.Users.AnyAsync(x => x.Username == request.Username))

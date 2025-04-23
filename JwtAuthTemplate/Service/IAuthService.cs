@@ -9,5 +9,7 @@ namespace JwtAuthTemplate.Service
         Task<TokenResponseDto?> LoginAsync(UserDto request);
         Task<TokenResponseDto?> RefreshTokenAsync(RefreshTokenRequestDto request);
         Task<bool> VerifyEmailAsync(string token);
+        Task<bool> ResetPasswordAsync(string token, string newPassword);
+        Task<User?> ForgotPasswordAsync(string email);
     }
 }
