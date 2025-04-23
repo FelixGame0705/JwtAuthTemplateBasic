@@ -1,8 +1,10 @@
-using System.Text;
+﻿using System.Text;
 using JwtAuthTemplate.Data;
+using JwtAuthTemplate.MailUtils;
 using JwtAuthTemplate.Service;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 
@@ -24,6 +26,11 @@ namespace JwtAuthTemplate
                 options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
             );
 
+            var mailsettings = builder.Configuration.GetSection("MailSettings"); // đọc config
+            builder.Services.Configure<MailSettings>(mailsettings);
+            // Đăng ký SendMailService với kiểu Transient, mỗi lần gọi dịch
+            // vụ ISendMailService một đới tượng SendMailService tạo ra (đã inject config)
+            builder.Services.AddTransient<ISendMailService, SendMailService>();
             builder
                 .Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options =>

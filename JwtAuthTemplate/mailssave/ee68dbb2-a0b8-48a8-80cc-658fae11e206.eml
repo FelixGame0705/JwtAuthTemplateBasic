@@ -1,0 +1,10 @@
+From: Admin Test <templateasp.tien@gmail.com>
+Date: Wed, 23 Apr 2025 16:38:54 +0700
+Subject: Email Verification
+Message-Id: <AEHGD6L8ZPU4.8HVOYAY2S4QG@desktop-8q7ove2>
+Sender: Admin Test <templateasp.tien@gmail.com>
+To: tientrangame0705@gmail.com
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<p>Click the link below to verify your email:</p><a href='https://localhost:7218/api/Auth/verify-email?token=49cc40ab-d567-4b94-89e2-d09321c3bd27'>Verify Email</a>

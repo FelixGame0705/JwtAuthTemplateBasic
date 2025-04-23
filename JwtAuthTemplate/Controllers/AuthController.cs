@@ -1,40 +1,80 @@
-﻿using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
-using System.Threading.Tasks;
-using JwtAuthTemplate.Entities;
+﻿using JwtAuthTemplate.Entities;
+using JwtAuthTemplate.MailUtils;
 using JwtAuthTemplate.Models;
 using JwtAuthTemplate.Service;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.IdentityModel.Tokens;
 
 namespace JwtAuthTemplate.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class AuthController(IAuthService authService) : ControllerBase
+    public class AuthController : ControllerBase
     {
-        public static User user = new();
+        private readonly IAuthService _authService;
+        private readonly ISendMailService _sendMailService;
+
+        public AuthController(IAuthService authService, ISendMailService sendMailService)
+        {
+            _authService = authService;
+            _sendMailService = sendMailService;
+        }
 
         [HttpPost("register")]
         public async Task<ActionResult<User>> Register(UserDto request)
         {
-            var user = await authService.RegisterAsync(request);
+            var user = await _authService.RegisterAsync(request);
 
             if (user is null)
             {
                 return BadRequest("User already exists.");
             }
-            return Ok(user);
+
+            // Tạo đường link xác thực
+            var verificationLink = Url.Action(
+                "VerifyEmail",
+                "Auth",
+                new { token = user.VerificationToken },
+                Request.Scheme
+            );
+
+            // Gửi email xác thực
+            var mailContent = new MailContent
+            {
+                To = user.Email,
+                Subject = "Email Verification",
+                Body =
+                    $"<p>Click the link below to verify your email:</p><a href='{verificationLink}'>Verify Email</a>",
+            };
+
+            try
+            {
+                await _sendMailService.SendMail(mailContent);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Failed to send email: {ex.Message}");
+            }
+
+            return Ok("Registration successful. Please check your email to verify your account.");
+        }
+
+        [HttpGet("verify-email")]
+        public async Task<IActionResult> VerifyEmail(string token)
+        {
+            var result = await _authService.VerifyEmailAsync(token);
+            if (!result)
+            {
+                return BadRequest("Invalid or expired verification token.");
+            }
+
+            return Ok("Email verified successfully.");
         }
 
         [HttpPost("login")]
         public async Task<ActionResult<TokenResponseDto>> Login(UserDto request)
         {
-            var token = await authService.LoginAsync(request);
+            var token = await _authService.LoginAsync(request);
             if (token is null)
             {
                 return BadRequest("Invalid username or password.");
@@ -57,14 +97,16 @@ namespace JwtAuthTemplate.Controllers
         }
 
         [HttpPost("refresh-token")]
-        public async Task<ActionResult<User>> RefreshToken(RefreshTokenRequestDto request)
+        public async Task<ActionResult<TokenResponseDto>> RefreshToken(
+            RefreshTokenRequestDto request
+        )
         {
-            var user = await authService.RefreshTokenAsync(request);
-            if (user is null)
+            var tokenResponse = await _authService.RefreshTokenAsync(request);
+            if (tokenResponse is null)
             {
                 return BadRequest("Invalid token.");
             }
-            return Ok(user);
+            return Ok(tokenResponse);
         }
     }
 }

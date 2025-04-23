@@ -11,35 +11,66 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace JwtAuthTemplate.Service
 {
-    public class AuthService(UserDbContext context, IConfiguration configuration) : IAuthService
+    public class AuthService : IAuthService
     {
+        private readonly UserDbContext _context;
+        private readonly IConfiguration _configuration;
+
+        public AuthService(UserDbContext context, IConfiguration configuration)
+        {
+            _context = context;
+            _configuration = configuration;
+        }
+
         public async Task<User?> RegisterAsync(UserDto request)
         {
-            if (await context.Users.AnyAsync(x => x.Username == request.Username))
+            if (await _context.Users.AnyAsync(x => x.Username == request.Username))
             {
                 return null;
             }
 
-            var user = new User();
+            var user = new User
+            {
+                Username = request.Username,
+                Email = request.Email, // Assuming username is the email
+                PasswordHash = new PasswordHasher<User>().HashPassword(null, request.Password),
+                VerificationToken = Guid.NewGuid().ToString(), // Tạo token xác thực
+                IsEmailVerified =
+                    false // Đặt trạng thái email chưa được xác thực
+                ,
+            };
 
-            var hashedPassword = new PasswordHasher<User>().HashPassword(user, request.Password);
-
-            user.Username = request.Username;
-            user.PasswordHash = hashedPassword;
-
-            context.Users.Add(user);
-            await context.SaveChangesAsync();
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
 
             return user;
         }
 
+        public async Task<bool> VerifyEmailAsync(string token)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.VerificationToken == token);
+            if (user == null)
+            {
+                return false;
+            }
+
+            user.IsEmailVerified = true;
+            user.VerificationToken = null; // Xóa token sau khi xác thực
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
         public async Task<TokenResponseDto?> LoginAsync(UserDto request)
         {
-            var user = await context.Users.FirstOrDefaultAsync(x => x.Username == request.Username);
+            var user = await _context.Users.FirstOrDefaultAsync(x =>
+                x.Username == request.Username
+            );
             if (user is null)
             {
                 return null;
             }
+
             if (
                 new PasswordHasher<User>().VerifyHashedPassword(
                     user,
@@ -50,7 +81,7 @@ namespace JwtAuthTemplate.Service
             {
                 return null;
             }
-            //string token = CreateToken(user);
+
             return await CreateTokenResponse(user);
         }
 
@@ -63,24 +94,8 @@ namespace JwtAuthTemplate.Service
             };
         }
 
-        private async Task<User?> ValidateRefreshTokenAsync(Guid userId, string refreshToken)
-        {
-            var user = await context.Users.FindAsync(userId);
-            if (
-                user is null
-                || user.RefreshToken != refreshToken
-                || user.RefreshTokenExpiryTime <= DateTime.UtcNow
-            )
-            {
-                return null;
-            }
-            return user;
-        }
-
         private string CreateToken(User user)
         {
-            //  Create a token using the user information
-            // This is just a placeholder, implement your token creation logic here
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.Name, user.Username),
@@ -89,18 +104,18 @@ namespace JwtAuthTemplate.Service
             };
 
             var key = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(configuration.GetValue<string>("AppSettings:Token")!)
+                Encoding.UTF8.GetBytes(_configuration["AppSettings:Token"]!)
             );
-
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha512);
 
             var tokenDescriptor = new JwtSecurityToken(
-                issuer: configuration.GetValue<string>("AppSettings:Issuer"),
-                audience: configuration.GetValue<string>("AppSettings:Audience"),
+                issuer: _configuration["AppSettings:Issuer"],
+                audience: _configuration["AppSettings:Audience"],
                 claims: claims,
                 expires: DateTime.Now.AddDays(1),
                 signingCredentials: creds
             );
+
             return new JwtSecurityTokenHandler().WriteToken(tokenDescriptor);
         }
 
@@ -117,18 +132,22 @@ namespace JwtAuthTemplate.Service
             var refreshToken = GenerateRefreshToken();
             user.RefreshToken = refreshToken;
             user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
-            //context.Users.Update(user);
-            await context.SaveChangesAsync();
+            await _context.SaveChangesAsync();
             return refreshToken;
         }
 
         public async Task<TokenResponseDto?> RefreshTokenAsync(RefreshTokenRequestDto request)
         {
-            var user = await ValidateRefreshTokenAsync(request.UserId, request.RefreshToken);
-            if (user is null)
+            var user = await _context.Users.FindAsync(request.UserId);
+            if (
+                user is null
+                || user.RefreshToken != request.RefreshToken
+                || user.RefreshTokenExpiryTime <= DateTime.UtcNow
+            )
             {
                 return null;
             }
+
             return await CreateTokenResponse(user);
         }
     }
